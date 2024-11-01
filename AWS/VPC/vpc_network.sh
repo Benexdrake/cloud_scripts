@@ -58,7 +58,6 @@ echo ">>> Nat Gateway ID: $ngw_id"
 echo "waiting 1min for creating the Nat Gateway..."
 sleep 60
 
-
 echo "creating route table for private subnet"
 rtb_private_id=$(aws ec2 create-route-table --vpc-id $vpc_id | jq -r ".RouteTable.RouteTableId")
 echo ">>> Route Table ID: $rtb_private_id"
@@ -66,14 +65,40 @@ echo ">>> Route Table ID: $rtb_private_id"
 echo "creating route for private nat gateway"
 aws ec2 create-route --route-table-id $rtb_private_id --destination-cidr-block 0.0.0.0/0 --nat-gateway-id $ngw_id > /dev/null
 
-
 echo "associate route table with private subnet"
 association_private_id=$(aws ec2 associate-route-table --subnet-id $private_subnet_id --route-table-id $rtb_private_id | jq -r ".AssociationId")
 echo ">>> Association ID: $association_private_id"
 
 
+# Security Group erstellen #####################################################################################
+
+echo "creating secutity group for python"
+sg_python_id=$(aws ec2 create-security-group --group-name PythonSG --description "Security group for Python EC2" --vpc-id $vpc_id | jq -r ".GroupId")
+echo ">>> Security Group ID: $sg_python_id"
+
+echo "creating secutity group for database"
+sg_database_id=$(aws ec2 create-security-group --group-name DatabaseSG --description "Security group for MySql Database EC2" --vpc-id $vpc_id | jq -r ".GroupId")
+echo ">>> Security Group ID: $sg_database_id"
+
+echo "allow port 22 for SSH"
+aws ec2 authorize-security-group-ingress --group-id $sg_python_id --protocol tcp --port 22 --cidr 0.0.0.0/0 > /dev/null
+
+echo "allow connection for python over port 3306"
+aws ec2 authorize-security-group-ingress --group-id $sg_database_id --protocol tcp --port 3306 --source-group $sg_python_id > /dev/null
+
+
+# Ec2 Instanzen erstellen #####################################################################################
+
+
+
+
+
 
 # Alles löschen ###############################################################################################
+
+echo "deleting security groups"
+aws ec2 delete-security-group --group-id $sg_database_id
+aws ec2 delete-security-group --group-id $sg_python_id
 
 
 echo "deleting nat gateway"
