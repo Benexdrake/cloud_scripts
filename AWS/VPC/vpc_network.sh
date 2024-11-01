@@ -109,6 +109,10 @@ sleep 300
 echo "deleting key pairs"
 aws ec2 delete-key-pair --key-name python_key
 aws ec2 delete-key-pair --key-name database_key
+rm python_key
+rm database_key
+rm python_key.pem
+rm database_key.pem
 
 
 echo "deleting ec2s"
