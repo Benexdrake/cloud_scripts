@@ -1,7 +1,7 @@
 #!/bin/bash
 
-ami_id="ami-04dd23e62ed049936"
-
+ubuntu_ami_id="ami-04dd23e62ed049936"
+linux_ami_id="ami-07c5ecd8498c59db5"
 
 # VPC erstellen #############################################################################################
 
@@ -89,12 +89,34 @@ aws ec2 authorize-security-group-ingress --group-id $sg_database_id --protocol t
 
 # Ec2 Instanzen erstellen #####################################################################################
 
+echo "creating ssh keys"
+aws ec2 create-key-pair --key-name python_key --key-type rsa --key-format pem --output text > python_key.pem
+aws ec2 create-key-pair --key-name database_key --key-type rsa --key-format pem --output text > database_key.pem
 
+echo "creating python instance with amazon linux"
+python_instance_id=$(aws ec2 run-instances --image-id $linux_ami_id --instance-type t2.micro --key-name python_key --subnet-id $public_subnet_id --security-group-ids $sg_python_id --user-data $(base64 -w 0 user_data_python.sh) --associate-public-ip-address | jq -r ".Instances[0].InstanceId")
+echo ">>> Python Instance ID: $python_instance_id"
 
+echo "creating database instance with ubuntu"
+database_instance_id=$(aws ec2 run-instances --image-id $ubuntu_ami_id --instance-type t2.micro --key-name database_key --subnet-id $private_subnet_id --security-group-ids $sg_database_id --user-data $(base64 -w 0 user_data_database.sh) | jq -r ".Instances[0].InstanceId")
+echo ">>> Database Instance ID: $database_instance_id"
 
+echo "wait 5min for initialising EC2s"
+sleep 300
 
 
 # Alles löschen ###############################################################################################
+echo "deleting key pairs"
+aws ec2 delete-key-pair --key-name python_key
+aws ec2 delete-key-pair --key-name database_key
+
+
+echo "deleting ec2s"
+aws ec2 terminate-instances --instance-ids $python_instance_id
+aws ec2 terminate-instances --instance-ids $database_instance_id
+
+echo "waiting for shutdown of ec2 instances"
+sleep 120
 
 echo "deleting security groups"
 aws ec2 delete-security-group --group-id $sg_database_id
