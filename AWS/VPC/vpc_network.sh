@@ -33,15 +33,15 @@ aws ec2 attach-internet-gateway --vpc-id $vpc_id --internet-gateway-id $igw_id
 # Route Table erstellen und verbinden #########################################################################
 
 echo "creating route table for public subnet"
-rtb_id=$(aws ec2 create-route-table --vpc-id $vpc_id | jq -r ".RouteTable.RouteTableId")
-echo ">>> Route Table ID: $rtb_id"
+rtb_public_id=$(aws ec2 create-route-table --vpc-id $vpc_id | jq -r ".RouteTable.RouteTableId")
+echo ">>> Route Table ID: $rtb_public_id"
 
 echo "creating route for Internet"
-aws ec2 create-route --route-table-id $rtb_id --destination-cidr-block 0.0.0.0/0 --gateway-id $igw_id > /dev/null
+aws ec2 create-route --route-table-id $rtb_public_id --destination-cidr-block 0.0.0.0/0 --gateway-id $igw_id > /dev/null
 
 echo "associate route table with public subnet"
-association_id=$(aws ec2 associate-route-table --subnet-id $public_subnet_id --route-table-id $rtb_id | jq -r ".AssociationId")
-echo ">>> Association ID: $association_id"
+association_public_id=$(aws ec2 associate-route-table --subnet-id $public_subnet_id --route-table-id $rtb_public_id | jq -r ".AssociationId")
+echo ">>> Association ID: $association_public_id"
 
 # Nat Gateway erstellen #######################################################################################
 
@@ -49,13 +49,27 @@ echo "creating elastic ip for Nat Gateway"
 allocation_id=$(aws ec2 allocate-address | jq -r ".AllocationId")
 echo ">>> Allocation ID: $allocation_id"
 
-
-
 # Route Table für Private Subnet erstellen und Nate Gateway hinzufügen ########################################
 
 echo "creating Nat Gateway"
 ngw_id=$(aws ec2 create-nat-gateway --subnet-id $public_subnet_id --allocation-id $allocation_id | jq -r ".NatGateway.NatGatewayId")
 echo ">>> Nat Gateway ID: $ngw_id"
+
+echo "waiting 1min for creating the Nat Gateway..."
+sleep 60
+
+
+echo "creating route table for private subnet"
+rtb_private_id=$(aws ec2 create-route-table --vpc-id $vpc_id | jq -r ".RouteTable.RouteTableId")
+echo ">>> Route Table ID: $rtb_private_id"
+
+echo "creating route for private nat gateway"
+aws ec2 create-route --route-table-id $rtb_private_id --destination-cidr-block 0.0.0.0/0 --nat-gateway-id $ngw_id > /dev/null
+
+
+echo "associate route table with private subnet"
+association_private_id=$(aws ec2 associate-route-table --subnet-id $private_subnet_id --route-table-id $rtb_private_id | jq -r ".AssociationId")
+echo ">>> Association ID: $association_private_id"
 
 
 
@@ -72,8 +86,15 @@ aws ec2 release-address --allocation-id $allocation_id
 
 
 echo "deleting route table for public subnet"
-aws ec2 disassociate-route-table --association-id $association_id
-aws ec2 delete-route-table --route-table-id $rtb_id
+aws ec2 disassociate-route-table --association-id $association_public_id
+aws ec2 delete-route-table --route-table-id $rtb_public_id
+
+
+echo "deleting route table for private subnet"
+aws ec2 disassociate-route-table --association-id $association_private_id
+aws ec2 delete-route-table --route-table-id $rtb_private_id
+
+
 
 echo "detach and deleting igw..."
 aws ec2 detach-internet-gateway --internet-gateway-id $igw_id --vpc-id $vpc_id
